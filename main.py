@@ -34,24 +34,12 @@ async def start_web_server():
     port = int(os.environ.get("PORT", 10000))
     site = web.TCPSite(runner, '0.0.0.0', port)
     await site.start()
+    logger.info(f"Veb-server {port}-portda ishga tushdi")
 
-# --- Ishlaydigan modelni topish funksiyasi ---
-def find_working_model():
-    try:
-        # API kalitga ruxsat berilgan barcha modellarni olish
-        models = genai.list_models()
-        for m in models:
-            # Faqat matn yarata oladigan modellarni qidiramiz
-            if 'generateContent' in m.supported_methods:
-                logger.info(f"Ishlaydigan model topildi: {m.name}")
-                return genai.GenerativeModel(m.name)
-    except Exception as e:
-        logger.error(f"Modellarni sanashda xato: {e}")
-    # Agar hech narsa topilmasa, standart nomni qaytaramiz
-    return genai.GenerativeModel('gemini-pro')
-
-# Modelni bir marta aniqlab olamiz
-ai_model = find_working_model()
+# --- Ishlaydigan modelni tanlash ---
+# Hozirda 'gemini-1.5-flash' eng barqaror va deyarli barcha mintaqalarda ishlaydi
+MODEL_NAME = 'gemini-1.5-flash'
+ai_model = genai.GenerativeModel(MODEL_NAME)
 
 # --- Bot buyruqlari ---
 @dp.message(Command("start"))
@@ -61,37 +49,54 @@ async def start(message: Message):
     ])
     
     start_text = (
-        "✨ **Salom! Men mukammal Dilmurod AI yordamchingizman.**\n\n"
-        "Men Dilmurod AI texnologiyasi asosida ishlayman.\n"
+        "✨ **Salom! Men mukammal AI yordamchingizman.**\n\n"
+        "Men Google Gemini AI texnologiyasi asosida ishlayman.\n"
         "Sizga kod yozishda, g'oyalarni amalga oshirishda va har qanday savollarga javob berishda yordam bera olaman.\n\n"
-        "👤 **Admin:** @dilmurod9831\n\n"
         "💬 **Nima yordam kerak? Shunchaki yozing!**"
     )
     await message.answer(start_text, reply_markup=keyboard, parse_mode="Markdown")
 
 @dp.message()
 async def chat(message: Message):
+    # Foydalanuvchiga javob kutishini bildirish
     msg = await message.answer("🔍 O'ylayapman...")
+    
     try:
         # AI dan javob olish
+        # generate_content'ga string yuborish kifoya
         response = ai_model.generate_content(f"Javobni o'zbek tilida ber: {message.text}")
         
-        if response.text:
-            await msg.edit_text(response.text)
+        if response and response.text:
+            # Telegram xabar uzunligi chegarasi (4096 belgi)
+            full_text = response.text
+            if len(full_text) > 4000:
+                full_text = full_text[:4000] + "..."
+            
+            await msg.edit_text(full_text)
         else:
-            await msg.edit_text("Kechirasiz, AI javob qaytara olmadi.")
+            await msg.edit_text("Kechirasiz, AI javob qaytara olmadi (bo'sh javob).")
             
     except Exception as e:
-        logger.error(f"Xatolik: {e}")
-        # Agar xatolik bo'lsa, modelni qayta aniqlashga harakat qilamiz
-        try:
+        logger.error(f"Xatolik yuz berdi: {e}")
+        error_message = str(e)
+        
+        if "404" in error_message:
+            await msg.edit_text("❌ Model topilmadi. Admin model nomini yangilashi kerak.")
+        elif "429" in error_message:
+            await msg.edit_text("⚠️ Juda ko'p so'rov yuborildi. Birozdan keyin urinib ko'ring.")
+        else:
+            await msg.edit_text(f"❌ Xatolik yuz berdi:\n`{error_message[:200]}`", parse_mode="Markdown")
 
 async def main():
+    # Bir vaqtning o'zida ham serverni, ham botni ishga tushirish
     await asyncio.gather(
         start_web_server(),
         dp.start_polling(bot)
     )
 
 if __name__ == "__main__":
-    asyncio.run(main())
-    
+    try:
+        asyncio.run(main())
+    except (KeyboardInterrupt, SystemExit):
+        logger.info("Bot to'xtatildi")
+        
