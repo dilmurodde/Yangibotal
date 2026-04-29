@@ -85,11 +85,6 @@ async def chat(message: Message):
         logger.error(f"Xatolik: {e}")
         # Agar xatolik bo'lsa, modelni qayta aniqlashga harakat qilamiz
         try:
-            new_model = find_working_model()
-            response = new_model.generate_content(f"Javobni o'zbek tilida ber: {message.text}")
-            await msg.edit_text(response.text)
-        except Exception as e2:
-            await msg.edit_text(f"❌ Xatolik yuz berdi:\n`{str(e2)}`", parse_mode="Markdown")
 
 async def main():
     await asyncio.gather(
