@@ -35,6 +35,24 @@ async def start_web_server():
     site = web.TCPSite(runner, '0.0.0.0', port)
     await site.start()
 
+# --- Ishlaydigan modelni topish funksiyasi ---
+def find_working_model():
+    try:
+        # API kalitga ruxsat berilgan barcha modellarni olish
+        models = genai.list_models()
+        for m in models:
+            # Faqat matn yarata oladigan modellarni qidiramiz
+            if 'generateContent' in m.supported_methods:
+                logger.info(f"Ishlaydigan model topildi: {m.name}")
+                return genai.GenerativeModel(m.name)
+    except Exception as e:
+        logger.error(f"Modellarni sanashda xato: {e}")
+    # Agar hech narsa topilmasa, standart nomni qaytaramiz
+    return genai.GenerativeModel('gemini-pro')
+
+# Modelni bir marta aniqlab olamiz
+ai_model = find_working_model()
+
 # --- Bot buyruqlari ---
 @dp.message(Command("start"))
 async def start(message: Message):
@@ -43,8 +61,8 @@ async def start(message: Message):
     ])
     
     start_text = (
-        "✨ **Salom! Men mukammal AI yordamchingizman.**\n\n"
-        "Men Google Gemini AI texnologiyasi asosida ishlayman.\n"
+        "✨ **Salom! Men mukammal Dilmurod AI yordamchingizman.**\n\n"
+        "Men Dilmurod AI texnologiyasi asosida ishlayman.\n"
         "Sizga kod yozishda, g'oyalarni amalga oshirishda va har qanday savollarga javob berishda yordam bera olaman.\n\n"
         "👤 **Admin:** @dilmurod9831\n\n"
         "💬 **Nima yordam kerak? Shunchaki yozing!**"
@@ -55,23 +73,20 @@ async def start(message: Message):
 async def chat(message: Message):
     msg = await message.answer("🔍 O'ylayapman...")
     try:
-        # DIQQAT: Modelni har safar yangidan yaratamiz, bu 404 xatosini oldini oladi
-        # 'gemini-1.5-flash-latest' - eng barqaror nom
-        current_model = genai.GenerativeModel('gemini-1.5-flash-latest')
-        
-        response = current_model.generate_content(f"Javobni o'zbek tilida ber: {message.text}")
+        # AI dan javob olish
+        response = ai_model.generate_content(f"Javobni o'zbek tilida ber: {message.text}")
         
         if response.text:
             await msg.edit_text(response.text)
         else:
-            await msg.edit_text("Kechirasiz, AI javob qaytara olmadi. Iltimos, boshqacharoq so'rab ko'ring.")
+            await msg.edit_text("Kechirasiz, AI javob qaytara olmadi.")
             
     except Exception as e:
         logger.error(f"Xatolik: {e}")
-        # Agar flash-latest ham ishlamasa, eski 'gemini-pro' ni sinab ko'ramiz
+        # Agar xatolik bo'lsa, modelni qayta aniqlashga harakat qilamiz
         try:
-            backup_model = genai.GenerativeModel('gemini-pro')
-            response = backup_model.generate_content(f"Javobni o'zbek tilida ber: {message.text}")
+            new_model = find_working_model()
+            response = new_model.generate_content(f"Javobni o'zbek tilida ber: {message.text}")
             await msg.edit_text(response.text)
         except Exception as e2:
             await msg.edit_text(f"❌ Xatolik yuz berdi:\n`{str(e2)}`", parse_mode="Markdown")
@@ -84,4 +99,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
-            
+    
